@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeAnimations();
     initializeIntersectionObserver();
     initializeNavigation();
+    initializeAboutSlider();
     initializeForm();
     createBackToTopButton();
 });
@@ -127,6 +128,94 @@ document.querySelectorAll('.btn').forEach(btn => {
     });
 });
 
+// 5.1 About section photo slider - Apple-style pinned scroll gallery
+function initializeAboutSlider() {
+    const aboutSection = document.querySelector('#about');
+    if (!aboutSection) return;
+
+    const slides = Array.from(aboutSection.querySelectorAll('.about-bg-slider .about-slide'));
+    const dots = Array.from(aboutSection.querySelectorAll('.about-dot'));
+    const bgSlider = document.getElementById('aboutBgSlider');
+    const counterCurrent = document.getElementById('aboutCounterCurrent');
+    const scrollHint = document.getElementById('aboutScrollHint');
+
+    const slideCount = Math.min(slides.length, dots.length) || slides.length;
+    let activeIndex = 0;
+    let isAnimating = false;
+    let hintDismissed = false;
+
+    const pad = (n) => String(n + 1).padStart(2, '0');
+
+    const setActiveSlide = (index) => {
+        if (index === activeIndex) return;
+        slides[activeIndex]?.classList.remove('active');
+        dots[activeIndex]?.classList.remove('active');
+        activeIndex = index;
+        slides[activeIndex]?.classList.add('active');
+        dots[activeIndex]?.classList.add('active');
+        if (counterCurrent) counterCurrent.textContent = pad(activeIndex);
+    };
+
+    const dismissHint = () => {
+        if (hintDismissed || !scrollHint) return;
+        hintDismissed = true;
+        scrollHint.classList.add('is-hidden');
+    };
+
+    // The gallery only "pins" the wheel on wide viewports where the section
+    // fills the full viewport height (see CSS .about height: 100vh).
+    const isPinned = () => {
+        if (window.innerWidth <= 900) return false;
+        const rect = aboutSection.getBoundingClientRect();
+        const epsilon = 2;
+        return rect.top <= epsilon && rect.bottom >= window.innerHeight - epsilon;
+    };
+
+    aboutSection.addEventListener('wheel', (event) => {
+        if (!isPinned()) return;
+        if (Math.abs(event.deltaY) < 4) return;
+
+        const direction = event.deltaY > 0 ? 1 : -1;
+        const atLastGoingForward = direction > 0 && activeIndex === slideCount - 1;
+        const atFirstGoingBack = direction < 0 && activeIndex === 0;
+
+        // Already at the first/last photo and scrolling further away from the
+        // gallery: release the wheel so the page continues to scroll normally.
+        if (atLastGoingForward || atFirstGoingBack) return;
+
+        event.preventDefault();
+        dismissHint();
+        if (isAnimating) return;
+
+        isAnimating = true;
+        setActiveSlide(activeIndex + direction);
+        setTimeout(() => {
+            isAnimating = false;
+        }, 620);
+    }, { passive: false });
+
+    dots.forEach(dot => {
+        dot.addEventListener('click', () => {
+            dismissHint();
+            setActiveSlide(Number(dot.dataset.index));
+        });
+    });
+
+    // Subtle Apple-style parallax: the photo drifts opposite the cursor.
+    if (bgSlider && window.matchMedia('(pointer: fine)').matches) {
+        aboutSection.addEventListener('mousemove', (event) => {
+            const rect = aboutSection.getBoundingClientRect();
+            const relX = (event.clientX - rect.left) / rect.width - 0.5;
+            const relY = (event.clientY - rect.top) / rect.height - 0.5;
+            bgSlider.style.transform = `translate3d(${relX * -24}px, ${relY * -18}px, 0) scale(1.04)`;
+        }, { passive: true });
+
+        aboutSection.addEventListener('mouseleave', () => {
+            bgSlider.style.transform = 'translate3d(0, 0, 0) scale(1.04)';
+        });
+    }
+}
+
 // 6. 卡片悬停效果
 document.querySelectorAll('.education-card, .research-card, .contact-info-box').forEach(card => {
     card.addEventListener('mouseenter', function() {
@@ -140,7 +229,8 @@ document.querySelectorAll('.education-card, .research-card, .contact-info-box').
     });
 });
 
-// 7. 表单处理
+// 7. 表单处理 - submits to Formspree via fetch so visitors never need their
+// own email client open; gives inline Apple-style loading/success/error states.
 function initializeForm() {
     const contactForm = document.querySelector('.contact-form');
     if (!contactForm) return;
@@ -157,27 +247,57 @@ function initializeForm() {
         });
     });
 
-    // Allow mailto form submission, otherwise show success feedback
-    contactForm.addEventListener('submit', (e) => {
-        if (contactForm.action && contactForm.action.startsWith('mailto:')) {
-            return;
-        }
+    const submitBtn = contactForm.querySelector('button[type="submit"]');
+    const submitLabel = submitBtn.querySelector('.btn-label');
+    const originalLabel = submitLabel ? submitLabel.textContent : '';
+    const statusEl = contactForm.querySelector('#contactFormStatus');
 
+    const setStatus = (message, tone) => {
+        if (!statusEl) return;
+        statusEl.textContent = message;
+        statusEl.className = 'contact-form-status' + (tone ? ` is-${tone}` : '');
+    };
+
+    contactForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (submitBtn.disabled) return;
 
-        const submitBtn = contactForm.querySelector('button[type="submit"]');
-        const originalText = submitBtn.textContent;
-
-        submitBtn.textContent = '✓ Sent';
-        submitBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
         submitBtn.disabled = true;
+        submitBtn.classList.add('is-loading');
+        setStatus('', '');
 
-        setTimeout(() => {
-            submitBtn.textContent = originalText;
-            submitBtn.style.background = '';
+        try {
+            const response = await fetch(contactForm.action, {
+                method: 'POST',
+                body: new FormData(contactForm),
+                headers: { Accept: 'application/json' }
+            });
+
+            if (response.ok) {
+                submitBtn.classList.remove('is-loading');
+                submitBtn.classList.add('is-success');
+                if (submitLabel) submitLabel.textContent = 'Sent';
+                setStatus('Thanks! Your message has been sent — I’ll get back to you soon.', 'success');
+                contactForm.reset();
+
+                setTimeout(() => {
+                    submitBtn.classList.remove('is-success');
+                    if (submitLabel) submitLabel.textContent = originalLabel;
+                    submitBtn.disabled = false;
+                }, 2400);
+            } else {
+                const data = await response.json().catch(() => null);
+                const detail = data?.errors?.map(err => err.message).join(', ');
+                throw new Error(detail || 'Something went wrong. Please try again.');
+            }
+        } catch (error) {
+            submitBtn.classList.remove('is-loading');
             submitBtn.disabled = false;
-            contactForm.reset();
-        }, 2000);
+            setStatus(
+                `${error.message || 'Something went wrong.'} You can also email me directly at xinyuanzhu2024@163.com.`,
+                'error'
+            );
+        }
     });
 }
 

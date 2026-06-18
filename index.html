@@ -63,25 +63,57 @@
     </section>
 
     <!-- About Section -->
-    <section id="about" class="about">
-        <div class="container">
-            <h2 class="section-title">About Me</h2>
+    <section id="about" class="about" aria-label="About Me">
+        <div class="about-bg-slider" id="aboutBgSlider" aria-hidden="true">
+            <div class="about-slide active" style="background-image: url('/images/photo1.jpg');"></div>
+            <div class="about-slide" style="background-image: url('/images/photo2.jpg');"></div>
+            <div class="about-slide" style="background-image: url('/images/photo3.jpg');"></div>
+            <div class="about-slide" style="background-image: url('/images/photo4.jpg');"></div>
+            <div class="about-slide" style="background-image: url('/images/photo5.jpg');"></div>
+            <div class="about-slide" style="background-image: url('/images/photo6.jpg');"></div>
+            <div class="about-slide" style="background-image: url('/images/photo7.jpg');"></div>
+            <div class="about-slide" style="background-image: url('/images/photo8.jpg');"></div>
+        </div>
+        <div class="about-overlay"></div>
+        <div class="container about-container">
+            <div class="about-top">
+                <h2 class="section-title">About Me</h2>
+                <div class="about-counter" aria-hidden="true">
+                    <span id="aboutCounterCurrent">01</span><span class="about-counter-sep">/</span><span id="aboutCounterTotal">08</span>
+                </div>
+            </div>
             <div class="about-content">
-                <p>
-                    I am a driven computer science professional focused on building innovative solutions through AI and software engineering. My academic journey spans Yale University and The Chinese University of Hong Kong, Shenzhen.
-                </p>
-                <p>
-                    My research interests include machine learning, deep learning, reinforcement learning, and robotics. I have hands-on experience from internships at Bosch, OPPO, and CITIC Securities.
-                </p>
-                <p class="about-contact">
-                    Contact me directly at <a href="mailto:xinyuanzhu2024@163.com">xinyuanzhu2024@163.com</a>, or connect via <a href="https://www.linkedin.com/in/xinyuan-jacob-zhu-3a6934273/" target="_blank" rel="noopener noreferrer">LinkedIn</a> and <a href="https://www.instagram.com/jacobzhu66/" target="_blank" rel="noopener noreferrer">Instagram</a>.
-                </p>
+                <div class="about-copy">
+                    <p>
+                        I am a driven computer science professional focused on building innovative solutions through AI and software engineering. My academic journey spans Yale University and The Chinese University of Hong Kong, Shenzhen.
+                    </p>
+                    <p>
+                        My research interests include machine learning, deep learning, reinforcement learning, and robotics. I have hands-on experience from internships at Bosch, OPPO, and CITIC Securities.
+                    </p>
+                    <p class="about-contact">
+                        Contact me directly at <a href="mailto:xinyuanzhu2024@163.com">xinyuanzhu2024@163.com</a>, or connect via <a href="https://www.linkedin.com/in/xinyuan-jacob-zhu-3a6934273/" target="_blank" rel="noopener noreferrer">LinkedIn</a> and <a href="https://www.instagram.com/jacobzhu66/" target="_blank" rel="noopener noreferrer">Instagram</a>.
+                    </p>
+                </div>
                 <div class="contact-info">
                     <p><strong>Phone:</strong> <a href="tel:+8618042788597">+86 18042788597</a></p>
                     <p><strong>Email:</strong> <a href="mailto:xinyuanzhu2024@163.com">xinyuanzhu2024@163.com</a></p>
                     <p><strong>Location:</strong> China / USA</p>
                 </div>
             </div>
+            <div class="about-slider-indicators" id="aboutSliderIndicators" aria-label="Photo navigation">
+                <button class="about-dot active" data-index="0" aria-label="Photo 1"></button>
+                <button class="about-dot" data-index="1" aria-label="Photo 2"></button>
+                <button class="about-dot" data-index="2" aria-label="Photo 3"></button>
+                <button class="about-dot" data-index="3" aria-label="Photo 4"></button>
+                <button class="about-dot" data-index="4" aria-label="Photo 5"></button>
+                <button class="about-dot" data-index="5" aria-label="Photo 6"></button>
+                <button class="about-dot" data-index="6" aria-label="Photo 7"></button>
+                <button class="about-dot" data-index="7" aria-label="Photo 8"></button>
+            </div>
+        </div>
+        <div class="about-scroll-hint" id="aboutScrollHint" aria-hidden="true">
+            <span class="about-scroll-hint-mouse"><span class="about-scroll-hint-wheel"></span></span>
+            <span class="about-scroll-hint-text">Scroll to explore</span>
         </div>
     </section>
 
@@ -415,11 +447,18 @@
                     </p>
                 </div>
             </div>
-            <form class="contact-form" action="mailto:xinyuanzhu2024@163.com?subject=Website%20Contact" method="post" enctype="text/plain" target="_blank">
-                <input type="text" name="Name" placeholder="Your Name" required>
-                <input type="email" name="Email" placeholder="Your Email" required>
-                <textarea name="Message" placeholder="Your Message" rows="5" required></textarea>
-                <button type="submit" class="btn btn-primary">Send Message</button>
+            <form class="contact-form" id="contactForm" action="https://formspree.io/f/mvznnkjv" method="POST">
+                <input type="hidden" name="_subject" value="New message from xinyuanzhu.com">
+                <input type="text" name="name" placeholder="Your Name" autocomplete="name" required>
+                <input type="email" name="email" placeholder="Your Email" autocomplete="email" required>
+                <textarea name="message" placeholder="Your Message" rows="5" required></textarea>
+                <!-- Honeypot field to deter simple bots; hidden from real visitors -->
+                <input type="text" name="_gotcha" class="contact-form-honeypot" tabindex="-1" autocomplete="off">
+                <button type="submit" class="btn btn-primary">
+                    <span class="btn-label">Send Message</span>
+                    <span class="btn-spinner" aria-hidden="true"></span>
+                </button>
+                <p class="contact-form-status" id="contactFormStatus" role="status" aria-live="polite"></p>
             </form>
         </div>
     </section>
