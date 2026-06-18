@@ -6,8 +6,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     initializeAnimations();
     initializeIntersectionObserver();
+    initializeSectionFlip();
     initializeNavigation();
     initializeAboutSlider();
+    initializeCardTilt();
     initializeForm();
     createBackToTopButton();
 });
@@ -94,9 +96,20 @@ function initializeIntersectionObserver() {
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
+                const el = entry.target;
                 // 添加动画类
-                entry.target.style.animation = `fadeInUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards`;
-                observer.unobserve(entry.target);
+                el.style.animation = `fadeInUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards`;
+                // `forwards` keeps the animation "filling" indefinitely, which
+                // would otherwise permanently block later JS-driven transform
+                // changes (e.g. the hover tilt) on this element. Once the
+                // entrance animation finishes, hand `transform`/`opacity`
+                // back to plain inline styles so later mutations apply normally.
+                el.addEventListener('animationend', () => {
+                    el.style.animation = '';
+                    el.style.opacity = '1';
+                    el.style.transform = '';
+                }, { once: true });
+                observer.unobserve(el);
             }
         });
     }, observerOptions);
@@ -107,6 +120,28 @@ function initializeIntersectionObserver() {
     ).forEach(el => {
         observer.observe(el);
     });
+}
+
+// 4.1 "Page flip" reveal - each major section tilts up into place once as
+// it scrolls into view (see .section-flip in styles.css for the resting/
+// revealed transform states).
+function initializeSectionFlip() {
+    const sections = document.querySelectorAll('.section-flip');
+    if (!sections.length) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, {
+        threshold: 0.12,
+        rootMargin: '0px 0px -80px 0px'
+    });
+
+    sections.forEach(section => observer.observe(section));
 }
 
 // 5. 按钮悬停效果
@@ -216,18 +251,44 @@ function initializeAboutSlider() {
     }
 }
 
-// 6. 卡片悬停效果
-document.querySelectorAll('.education-card, .research-card, .contact-info-box').forEach(card => {
-    card.addEventListener('mouseenter', function() {
-        this.style.transform = 'translateY(-10px)';
-        this.style.boxShadow = '0 20px 50px rgba(107, 29, 43, 0.15)';
-    });
+// 6. 卡片 3D 倾斜效果 - replaces the old flat translateY lift with a subtle
+// cursor-driven tilt (box-shadow/border-color stay owned by CSS :hover;
+// this owns `transform` exclusively so the two never fight each other).
+function initializeCardTilt() {
+    const cards = document.querySelectorAll(
+        '.education-card, .research-card, .timeline-content, .skill-category, .contact-info-box, .paper-item'
+    );
+    if (!cards.length || !window.matchMedia('(pointer: fine)').matches) return;
 
-    card.addEventListener('mouseleave', function() {
-        this.style.transform = 'translateY(0)';
-        this.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.06)';
+    const REST_TRANSFORM = 'perspective(900px) rotateX(0deg) rotateY(0deg) translateY(0) scale(1)';
+
+    cards.forEach(card => {
+        card.style.transform = REST_TRANSFORM;
+        let frame = null;
+
+        card.addEventListener('mousemove', (event) => {
+            if (frame) return;
+            frame = requestAnimationFrame(() => {
+                const rect = card.getBoundingClientRect();
+                const relX = (event.clientX - rect.left) / rect.width - 0.5;
+                const relY = (event.clientY - rect.top) / rect.height - 0.5;
+                const rotateY = relX * 8;
+                const rotateX = relY * -8;
+                card.style.transform =
+                    `perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-8px) scale(1.015)`;
+                frame = null;
+            });
+        }, { passive: true });
+
+        card.addEventListener('mouseleave', () => {
+            if (frame) {
+                cancelAnimationFrame(frame);
+                frame = null;
+            }
+            card.style.transform = REST_TRANSFORM;
+        });
     });
-});
+}
 
 // 7. 表单处理 - submits to Formspree via fetch so visitors never need their
 // own email client open; gives inline Apple-style loading/success/error states.
@@ -251,6 +312,7 @@ function initializeForm() {
     const submitLabel = submitBtn.querySelector('.btn-label');
     const originalLabel = submitLabel ? submitLabel.textContent : '';
     const statusEl = contactForm.querySelector('#contactFormStatus');
+    const isZh = document.documentElement.lang === 'zh';
 
     const setStatus = (message, tone) => {
         if (!statusEl) return;
@@ -276,8 +338,13 @@ function initializeForm() {
             if (response.ok) {
                 submitBtn.classList.remove('is-loading');
                 submitBtn.classList.add('is-success');
-                if (submitLabel) submitLabel.textContent = 'Sent';
-                setStatus('Thanks! Your message has been sent — I’ll get back to you soon.', 'success');
+                if (submitLabel) submitLabel.textContent = isZh ? '已发送' : 'Sent';
+                setStatus(
+                    isZh
+                        ? '感谢您的留言，我会尽快回复！'
+                        : 'Thanks! Your message has been sent — I’ll get back to you soon.',
+                    'success'
+                );
                 contactForm.reset();
 
                 setTimeout(() => {
@@ -288,13 +355,15 @@ function initializeForm() {
             } else {
                 const data = await response.json().catch(() => null);
                 const detail = data?.errors?.map(err => err.message).join(', ');
-                throw new Error(detail || 'Something went wrong. Please try again.');
+                throw new Error(detail || (isZh ? '出现了一些问题，请稍后重试。' : 'Something went wrong. Please try again.'));
             }
         } catch (error) {
             submitBtn.classList.remove('is-loading');
             submitBtn.disabled = false;
             setStatus(
-                `${error.message || 'Something went wrong.'} You can also email me directly at xinyuanzhu2024@163.com.`,
+                isZh
+                    ? `${error.message || '出现了一些问题。'}您也可以直接发邮件至 xinyuanzhu2024@163.com。`
+                    : `${error.message || 'Something went wrong.'} You can also email me directly at xinyuanzhu2024@163.com.`,
                 'error'
             );
         }

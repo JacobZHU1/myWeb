@@ -37,6 +37,17 @@ body {
     letter-spacing: -0.3px;
 }
 
+/* Chinese page polish: negative Latin-style tracking reads as cramped on
+   full-width CJK glyphs, and Apple's own CJK system fonts read better
+   listed explicitly than left to implicit per-glyph fallback. */
+:lang(zh) {
+    letter-spacing: normal;
+}
+
+:lang(zh) body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+}
+
 /* 导航栏 - Apple 液态玻璃风格 */
 .navbar {
     background: var(--glass-light);
@@ -68,7 +79,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 2rem;
+    padding: 0 clamp(1rem, 5vw, 2rem);
 }
 
 .nav-brand {
@@ -88,21 +99,27 @@ body {
     transform: scale(1.02);
 }
 
+/* Every logo scales to a fixed HEIGHT (not width) inside a fixed-height
+   row, so org logos of wildly different native aspect ratios still line
+   up flush with each other and with the name/badge below them. */
 .card-logo {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.9rem;
-    margin-bottom: 1rem;
+    min-height: 64px;
+    margin-bottom: 1.1rem;
     /* prevent the logo container from shrinking when space is tight */
     flex: 0 0 auto;
 }
 
 .org-logo {
-    /* width/height can be manually controlled via CSS variables or inline style */
-    width: var(--org-logo-width, 220px) !important;
-    height: var(--org-logo-height, auto) !important;
-    max-width: var(--org-logo-max-width, 100%) !important;
-    max-height: var(--org-logo-max-height, 240px) !important;
+    /* height can be overridden per-image via --org-logo-height; width is
+       always auto so the logo's native aspect ratio is preserved */
+    width: auto !important;
+    height: var(--org-logo-height, 56px) !important;
+    max-width: var(--org-logo-max-width, 190px) !important;
+    max-height: var(--org-logo-max-height, 56px) !important;
     object-fit: contain;
     display: block;
     border-radius: 0;
@@ -113,29 +130,14 @@ body {
 }
 
 /* Convenience helper classes */
-.org-logo--small { --org-logo-width: 120px; }
-.org-logo--medium { --org-logo-width: 180px; }
-.org-logo--large { --org-logo-width: 240px; }
-.org-logo--xlarge { --org-logo-width: 320px; }
-
-/* Center logo inside its wrapper */
-.org-logo--center {
-    margin-left: auto;
-    margin-right: auto;
-}
+.org-logo--small { --org-logo-height: 40px; }
+.org-logo--medium { --org-logo-height: 52px; }
+.org-logo--large { --org-logo-height: 64px; }
+.org-logo--xlarge { --org-logo-height: 80px; }
 
 /* Force-fill helper: use when you want the image to fill and crop to the box */
 .org-logo--fill {
     object-fit: cover !important;
-}
-
-/* Convenience classes to control logo width from the wrapper */
-.card-logo--small { --org-logo-width: 120px; }
-.card-logo--medium { --org-logo-width: 180px; }
-.card-logo--large { --org-logo-width: 240px; }
-.card-logo--xlarge { --org-logo-width: 320px; }
-.card-logo--center {
-    justify-content: center;
 }
 
 .logo-fallback {
@@ -193,10 +195,42 @@ body {
     color: rgba(26, 26, 26, 0.72);
 }
 
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 1.75rem;
+}
+
 .nav-menu {
     display: flex;
     list-style: none;
     gap: 2.5rem;
+}
+
+/* Language switcher pill - sits at the top-right corner of the navbar */
+.lang-switch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: var(--primary-color);
+    border: 1.5px solid rgba(107, 29, 43, 0.25);
+    background: rgba(107, 29, 43, 0.06);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: var(--transition-smooth);
+}
+
+.lang-switch:hover {
+    background: var(--primary-color);
+    color: var(--bg-white);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(107, 29, 43, 0.25);
 }
 
 .nav-link {
@@ -231,23 +265,40 @@ body {
 .hamburger {
     display: none;
     flex-direction: column;
+    justify-content: center;
     cursor: pointer;
+    /* Padding (with a matching negative margin) grows the tap target to a
+       comfortable ~44px without changing the visual icon size. */
+    padding: 12px;
+    margin: -12px -12px -12px 0;
 }
 
 .hamburger span {
     width: 25px;
     height: 3px;
-    background-color: var(--bg-white);
-    margin: 5px 0;
+    background-color: var(--primary-color);
+    margin: 4px 0;
     transition: var(--transition);
     border-radius: 2px;
+}
+
+.hamburger.active span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+}
+
+.hamburger.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.hamburger.active span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
 }
 
 /* Hero Section - Apple 风格 */
 .hero {
     background: linear-gradient(135deg, #2c0e1a 0%, #6b1d2b 50%, #8b2c42 100%);
     color: var(--bg-white);
-    padding: 100px 0;
+    padding: clamp(60px, 10vw, 100px) 0;
     min-height: 80vh;
     display: flex;
     align-items: center;
@@ -270,7 +321,7 @@ body {
 .hero-content {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 2rem;
+    padding: 0 clamp(1rem, 5vw, 2rem);
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 4rem;
@@ -301,14 +352,14 @@ body {
     position: relative;
     width: 100%;
     max-width: 360px;
-    min-height: 360px;
+    min-height: clamp(180px, 50vw, 360px);
     align-items: center;
     justify-content: center;
 }
 
 .avatar-placeholder {
-    width: 320px;
-    height: 320px;
+    width: clamp(160px, 44vw, 320px);
+    height: clamp(160px, 44vw, 320px);
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.14);
     border: 3px solid rgba(255, 255, 255, 0.32);
@@ -334,8 +385,8 @@ body {
 }
 
 .profile-pic {
-    width: 320px;
-    height: 320px;
+    width: clamp(160px, 44vw, 320px);
+    height: clamp(160px, 44vw, 320px);
     border-radius: 50%;
     border: 3px solid rgba(255, 255, 255, 0.3);
     object-fit: cover;
@@ -364,7 +415,7 @@ body {
 }
 
 .hero-title {
-    font-size: 3.8rem;
+    font-size: clamp(1.9rem, 4.4vw, 3.8rem);
     font-weight: 700;
     margin-bottom: 0.5rem;
     letter-spacing: -1px;
@@ -426,7 +477,7 @@ body {
 }
 
 .hero-description {
-    font-size: 1.05rem;
+    font-size: clamp(0.92rem, 1.7vw, 1.05rem);
     margin-bottom: 2.5rem;
     line-height: 1.8;
     opacity: 0.9;
@@ -441,6 +492,8 @@ body {
 
 /* 按钮样式 - Apple 风格 */
 .btn {
+    position: relative;
+    overflow: hidden;
     padding: 14px 32px;
     border: none;
     border-radius: 12px;
@@ -452,6 +505,24 @@ body {
     display: inline-block;
     text-align: center;
     letter-spacing: 0.3px;
+}
+
+/* A diagonal light sweep on hover - a small, very "Apple keynote" touch. */
+.btn::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 35%;
+    height: 100%;
+    background: linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transform: skewX(-20deg);
+    transition: left 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+}
+
+.btn:hover::after {
+    left: 130%;
 }
 
 .btn-primary {
@@ -494,14 +565,14 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 2rem;
+    padding: 0 clamp(1rem, 5vw, 2rem);
 }
 
 /* 标题样式 - Apple 现代风格 */
 .section-title {
-    font-size: 2.8rem;
+    font-size: clamp(1.7rem, 3.4vw, 2.8rem);
     font-weight: 700;
-    margin-bottom: 3rem;
+    margin-bottom: clamp(2rem, 5vw, 3rem);
     text-align: center;
     color: var(--text-dark);
     position: relative;
@@ -540,6 +611,34 @@ body {
     }
     to {
         transform: translateX(-50%) scaleX(1);
+    }
+}
+
+/* "Page flip" section transitions - each major section tilts up out of the
+   page (like a card folding into place) and settles flat as it scrolls
+   into view, then never re-triggers. perspective() lives on the element's
+   own transform (not an ancestor) so it can't disturb the sticky navbar or
+   the fixed back-to-top button elsewhere on the page. Home and About are
+   excluded: Home is visible on load, About already drives its own pinned
+   photo gallery and shouldn't fight it with a competing transform. */
+.section-flip {
+    opacity: 0;
+    transform: perspective(1400px) rotateX(-10deg) translateY(60px) scale(0.97);
+    transform-origin: 50% 100%;
+    transition: opacity 1s cubic-bezier(0.22, 1, 0.36, 1), transform 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, opacity;
+}
+
+.section-flip.is-visible {
+    opacity: 1;
+    transform: perspective(1400px) rotateX(0deg) translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .section-flip {
+        opacity: 1;
+        transform: none;
+        transition: none;
     }
 }
 
@@ -744,6 +843,7 @@ body {
 }
 
 .about-dot {
+    position: relative;
     width: 26px;
     height: 4px;
     border-radius: 3px;
@@ -751,6 +851,17 @@ body {
     background: rgba(255, 255, 255, 0.38);
     transition: width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s ease, box-shadow 0.3s ease;
     cursor: pointer;
+}
+
+/* Invisible hit-area extension: keeps the slim Apple-style bar visually
+   thin while still giving touch input a comfortable ~32px tall target. */
+.about-dot::after {
+    content: '';
+    position: absolute;
+    top: -14px;
+    bottom: -14px;
+    left: -6px;
+    right: -6px;
 }
 
 .about-dot:hover {
@@ -873,7 +984,7 @@ body {
 
 /* 教育背景 */
 .education {
-    padding: 100px 0;
+    padding: clamp(60px, 10vw, 100px) 0;
     background: linear-gradient(180deg, #ffffff 0%, #f5f5f7 100%);
     position: relative;
 }
@@ -888,13 +999,14 @@ body {
     background: var(--glass-light);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    padding: 2.5rem;
+    padding: clamp(1.5rem, 4.5vw, 2.5rem);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
     transition: var(--transition);
     position: relative;
     overflow: hidden;
+    text-align: center;
     animation: fadeInUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
@@ -926,27 +1038,21 @@ body {
 }
 
 .education-card:hover {
-    transform: translateY(-10px);
     box-shadow: 0 20px 50px rgba(107, 29, 43, 0.15);
     border-color: rgba(212, 165, 116, 0.3);
-}
-
-.education-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-    position: relative;
-    z-index: 1;
 }
 
 .education-card h3 {
     font-size: 1.25rem;
     color: var(--primary-color);
     font-weight: 600;
+    margin-bottom: 0.6rem;
+    position: relative;
+    z-index: 1;
 }
 
 .degree {
+    display: inline-block;
     background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
     color: var(--bg-white);
     padding: 5px 14px;
@@ -955,6 +1061,7 @@ body {
     font-weight: 600;
     letter-spacing: 0.3px;
     box-shadow: 0 4px 15px rgba(107, 29, 43, 0.2);
+    margin-bottom: 0.8rem;
 }
 
 .major {
@@ -977,6 +1084,7 @@ body {
 .education-card .highlights {
     list-style: none;
     margin-top: 1rem;
+    text-align: left;
 }
 
 .education-card .highlights li {
@@ -993,86 +1101,93 @@ body {
     margin-right: 0.5rem;
 }
 
-/* 实习经历 */
+/* 实习经历 - Apple 风格单列轨道时间线，desktop 与 mobile 共用同一结构，
+   不再依赖 grid 占位 + 绝对定位的双重缩进，杜绝移动端被挤成一条窄缝 */
 .experience {
-    padding: 100px 0;
+    padding: clamp(60px, 10vw, 100px) 0;
     background: linear-gradient(180deg, #f5f5f7 0%, #ffffff 100%);
     position: relative;
 }
 
 .timeline {
     position: relative;
-    padding: 2rem 0;
-}
-
-.timeline::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 2px;
-    height: 100%;
-    background: linear-gradient(180deg, var(--primary-color), var(--accent-color));
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0.5rem 0;
 }
 
 .timeline-item {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2rem;
-    margin-bottom: 3rem;
+    display: flex;
+    align-items: flex-start;
+    gap: clamp(1rem, 3vw, 1.6rem);
+    padding-bottom: clamp(2rem, 5vw, 3rem);
     position: relative;
     animation: fadeInUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-.timeline-item:nth-child(1) {
-    animation-delay: 0.1s;
+.timeline-item:last-child {
+    padding-bottom: 0;
 }
 
-.timeline-item:nth-child(2) {
-    animation-delay: 0.2s;
+.timeline-item:nth-child(1) { animation-delay: 0.1s; }
+.timeline-item:nth-child(2) { animation-delay: 0.2s; }
+.timeline-item:nth-child(3) { animation-delay: 0.3s; }
+.timeline-item:nth-child(4) { animation-delay: 0.4s; }
+
+.timeline-rail {
+    flex: 0 0 auto;
+    width: clamp(20px, 5vw, 26px);
+    display: flex;
+    justify-content: center;
+    align-self: stretch;
+    position: relative;
 }
 
-.timeline-item:nth-child(3) {
-    animation-delay: 0.3s;
+/* The connecting line lives on the rail itself, so its position always
+   matches the marker exactly - no separate offset to keep in sync. */
+.timeline-rail::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    bottom: clamp(-3rem, -5vw, -2rem);
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, var(--primary-color), var(--accent-color));
 }
 
-.timeline-item:nth-child(4) {
-    animation-delay: 0.4s;
-}
-
-.timeline-item:nth-child(odd) .timeline-content {
-    grid-column: 1 / 2;
-}
-
-.timeline-item:nth-child(even) .timeline-content {
-    grid-column: 2 / 3;
+.timeline-item:last-child .timeline-rail::before {
+    display: none;
 }
 
 .timeline-marker {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 18px;
-    height: 18px;
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
-    border: 4px solid var(--bg-light);
+    width: 16px;
+    height: 16px;
+    margin-top: 4px;
     border-radius: 50%;
-    top: 20px;
-    z-index: 10;
-    box-shadow: 0 0 0 6px rgba(107, 29, 43, 0.1);
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    border: 3px solid var(--bg-light);
+    box-shadow: 0 0 0 5px rgba(107, 29, 43, 0.12);
+    z-index: 2;
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+.timeline-item:first-child .timeline-marker {
+    box-shadow: 0 0 0 5px rgba(107, 29, 43, 0.12), 0 0 0 9px rgba(212, 165, 116, 0.18);
+}
+
 .timeline-item:hover .timeline-marker {
-    transform: translateX(-50%) scale(1.3);
-    box-shadow: 0 0 0 8px rgba(107, 29, 43, 0.2);
+    transform: scale(1.25);
+    box-shadow: 0 0 0 7px rgba(107, 29, 43, 0.2);
 }
 
 .timeline-content {
+    flex: 1 1 auto;
+    min-width: 0;
     background: var(--glass-light);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    padding: 2.5rem;
+    padding: clamp(1.5rem, 4vw, 2.5rem);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
@@ -1080,7 +1195,6 @@ body {
 }
 
 .timeline-content:hover {
-    transform: translateY(-5px);
     box-shadow: 0 12px 40px rgba(107, 29, 43, 0.15);
     border-color: rgba(212, 165, 116, 0.3);
 }
@@ -1130,7 +1244,7 @@ body {
 
 /* 科研经历 */
 .research {
-    padding: 100px 0;
+    padding: clamp(60px, 10vw, 100px) 0;
     background: linear-gradient(180deg, #ffffff 0%, #f5f5f7 100%);
 }
 
@@ -1144,13 +1258,14 @@ body {
     background: var(--glass-light);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    padding: 2.5rem;
+    padding: clamp(1.5rem, 4.5vw, 2.5rem);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
     transition: var(--transition);
     position: relative;
     overflow: hidden;
+    text-align: center;
     animation: fadeInUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
@@ -1177,7 +1292,6 @@ body {
 }
 
 .research-card:hover {
-    transform: translateY(-10px);
     box-shadow: 0 20px 50px rgba(107, 29, 43, 0.15);
     border-color: rgba(212, 165, 116, 0.3);
 }
@@ -1196,6 +1310,7 @@ body {
 .research-card ul {
     list-style: none;
     color: var(--text-light);
+    text-align: left;
 }
 
 .research-card ul li {
@@ -1217,7 +1332,7 @@ body {
 
 /* 论文发表 */
 .papers {
-    padding: 100px 0;
+    padding: clamp(60px, 10vw, 100px) 0;
     background: linear-gradient(180deg, #f5f5f7 0%, #ffffff 100%);
 }
 
@@ -1233,7 +1348,7 @@ body {
     background: var(--glass-light);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    padding: 2.5rem;
+    padding: clamp(1.5rem, 4.5vw, 2.5rem);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
@@ -1251,7 +1366,6 @@ body {
 
 .paper-item:hover {
     box-shadow: 0 12px 40px rgba(107, 29, 43, 0.15);
-    transform: translateX(5px);
     border-color: rgba(212, 165, 116, 0.3);
 }
 
@@ -1291,7 +1405,7 @@ body {
 
 /* 技能 */
 .skills {
-    padding: 100px 0;
+    padding: clamp(60px, 10vw, 100px) 0;
     background: linear-gradient(180deg, #ffffff 0%, #f5f5f7 100%);
 }
 
@@ -1305,7 +1419,7 @@ body {
     background: var(--glass-light);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    padding: 2.5rem;
+    padding: clamp(1.5rem, 4.5vw, 2.5rem);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     text-align: center;
@@ -1330,7 +1444,6 @@ body {
 }
 
 .skill-category:hover {
-    transform: translateY(-10px);
     box-shadow: 0 20px 50px rgba(107, 29, 43, 0.15);
     background: linear-gradient(135deg, rgba(107, 29, 43, 0.05), rgba(212, 165, 116, 0.05));
     border-color: rgba(212, 165, 116, 0.3);
@@ -1370,7 +1483,7 @@ body {
 
 /* 联系方式 */
 .contact {
-    padding: 100px 0;
+    padding: clamp(60px, 10vw, 100px) 0;
     background: linear-gradient(180deg, #f5f5f7 0%, #ffffff 100%);
     position: relative;
 }
@@ -1379,14 +1492,15 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 2.5rem;
-    margin-bottom: 4rem;
+    max-width: 700px;
+    margin: 0 auto clamp(2.5rem, 6vw, 4rem);
 }
 
 .contact-info-box {
     background: var(--glass-light);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    padding: 2.5rem;
+    padding: clamp(1.5rem, 4.5vw, 2.5rem);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     text-align: center;
@@ -1408,7 +1522,6 @@ body {
 }
 
 .contact-info-box:hover {
-    transform: translateY(-10px);
     box-shadow: 0 20px 50px rgba(107, 29, 43, 0.15);
     border-color: rgba(212, 165, 116, 0.3);
 }
@@ -1568,38 +1681,21 @@ body {
         gap: 3rem;
     }
 
-    .profile-pic {
-        width: 280px;
-        height: 280px;
-    }
-
-    .hero-title {
-        font-size: 2.8rem;
-    }
-
     .about-content {
         grid-template-columns: 1fr;
-    }
-
-    .timeline::before {
-        left: 30px;
-    }
-
-    .timeline-item {
-        grid-template-columns: 70px 1fr;
-    }
-
-    .timeline-item:nth-child(odd) .timeline-content,
-    .timeline-item:nth-child(even) .timeline-content {
-        grid-column: 2 / 3;
-    }
-
-    .timeline-marker {
-        left: 30px;
     }
 }
 
 @media (max-width: 768px) {
+    .nav-right {
+        gap: 0.8rem;
+    }
+
+    .lang-switch {
+        padding: 5px 12px;
+        font-size: 0.76rem;
+    }
+
     .nav-menu {
         display: none;
     }
@@ -1633,18 +1729,6 @@ body {
         display: flex;
     }
 
-    .hero-title {
-        font-size: 2.2rem;
-    }
-
-    .chinese-name {
-        font-size: 1.5rem;
-    }
-
-    .hero-subtitle {
-        font-size: 1.1rem;
-    }
-
     .hero-buttons {
         flex-direction: column;
     }
@@ -1653,34 +1737,9 @@ body {
         width: 100%;
     }
 
-    .section-title {
-        font-size: 2rem;
-    }
-
-    .hero-description {
-        font-size: 0.95rem;
-    }
-
-    .profile-pic {
-        width: 220px;
-        height: 220px;
-    }
-
     .education-grid,
     .research-grid {
         grid-template-columns: 1fr;
-    }
-
-    .timeline {
-        padding-left: 60px;
-    }
-
-    .timeline::before {
-        left: 30px;
-    }
-
-    .timeline-marker {
-        left: 21px;
     }
 
     .skills-grid {
@@ -1702,38 +1761,9 @@ body {
         font-size: 1.3rem;
     }
 
-    .hero-title {
-        font-size: 1.8rem;
-    }
-
-    .section-title {
-        font-size: 1.6rem;
-    }
-
-    .hero-subtitle {
-        font-size: 1rem;
-    }
-
-    .profile-pic {
-        width: 160px;
-        height: 160px;
-    }
-
-    .hero-content {
-        padding: 0 1rem;
-    }
-
-    .container {
-        padding: 0 1rem;
-    }
-
     .btn {
         padding: 12px 24px;
         font-size: 0.9rem;
-    }
-
-    .education-header {
-        flex-direction: column;
     }
 
     .skill-tags {
