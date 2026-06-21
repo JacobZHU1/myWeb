@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeCardTilt();
     initializeForm();
     createBackToTopButton();
-    initializeAutoTapTool();
     initializeAutoTapBookmarkletLink();
 });
 
@@ -372,162 +371,8 @@ function initializeForm() {
     });
 }
 
-// 7.1 AutoTap Scheduler - fires a real click on a target element at an
-// exact wall-clock time (e.g. 19:00:00). Runs a coarse setTimeout to get
-// close, then a tight setInterval poll right before the target so the click
-// fires within ~15ms of the deadline (not requestAnimationFrame - browsers
-// fully suspend rAF in hidden/backgrounded tabs, which would silently miss
-// the deadline). A short burst of follow-up clicks absorbs the polling
-// slack. This demo only ever clicks elements within this page - it cannot
-// reach other tabs or apps, which is a browser sandboxing limit on every
-// platform, not a bug. To click something on a different site, use the
-// AutoTap Bookmarklet below instead: it runs the same engine inside that
-// page's own context, which the sandbox allows.
-function initializeAutoTapTool() {
-    const timeInput = document.getElementById('autotapTime');
-    const armBtn = document.getElementById('autotapArmBtn');
-    const cancelBtn = document.getElementById('autotapCancelBtn');
-    const statusEl = document.getElementById('autotapStatus');
-    const logEl = document.getElementById('autotapLog');
-    const target = document.getElementById('autotapTarget');
-    if (!timeInput || !armBtn || !cancelBtn || !statusEl || !logEl || !target) return;
 
-    const BURST_CLICKS = [0, 40, 90];
-    const MAX_LOG_ENTRIES = 5;
-
-    let countdownId = null;
-    let wakeTimeoutId = null;
-    let watchIntervalId = null;
-    let targetTimestamp = null;
-
-    // Default the input to one minute from now so the field starts populated.
-    const soon = new Date(Date.now() + 60000);
-    timeInput.value =
-        `${String(soon.getHours()).padStart(2, '0')}:` +
-        `${String(soon.getMinutes()).padStart(2, '0')}:` +
-        `${String(soon.getSeconds()).padStart(2, '0')}`;
-
-    const setStatus = (message, tone) => {
-        statusEl.textContent = message;
-        statusEl.className = 'autotap-status' + (tone ? ` is-${tone}` : '');
-    };
-
-    const formatClock = (date) =>
-        date.toLocaleTimeString('en-GB', { hour12: false }) +
-        '.' + String(date.getMilliseconds()).padStart(3, '0');
-
-    const logEntry = (text) => {
-        const li = document.createElement('li');
-        li.textContent = text;
-        logEl.prepend(li);
-        while (logEl.children.length > MAX_LOG_ENTRIES) {
-            logEl.removeChild(logEl.lastChild);
-        }
-    };
-
-    const clearTimers = () => {
-        if (countdownId) clearInterval(countdownId);
-        if (wakeTimeoutId) clearTimeout(wakeTimeoutId);
-        if (watchIntervalId) clearInterval(watchIntervalId);
-        countdownId = wakeTimeoutId = watchIntervalId = null;
-    };
-
-    const resetControls = () => {
-        armBtn.disabled = false;
-        cancelBtn.hidden = true;
-        timeInput.disabled = false;
-    };
-
-    const parseTargetTime = (value) => {
-        const parts = value.split(':').map(Number);
-        if (parts.some(Number.isNaN)) return null;
-        const [h, m, s = 0] = parts;
-        const date = new Date();
-        date.setHours(h, m, s, 0);
-        if (date.getTime() <= Date.now()) {
-            date.setDate(date.getDate() + 1);
-        }
-        return date;
-    };
-
-    const fireBurst = () => {
-        BURST_CLICKS.forEach((delay, i) => {
-            setTimeout(() => {
-                const now = new Date();
-                target.classList.remove('is-firing');
-                requestAnimationFrame(() => target.classList.add('is-firing'));
-                target.click();
-                const deltaMs = now.getTime() - targetTimestamp;
-                const sign = deltaMs >= 0 ? '+' : '';
-                logEntry(`Click ${i + 1}/${BURST_CLICKS.length} at ${formatClock(now)} (${sign}${deltaMs}ms from target)`);
-                if (i === BURST_CLICKS.length - 1) {
-                    setStatus(`Fired ${BURST_CLICKS.length} clicks around ${formatClock(new Date(targetTimestamp))}.`, 'fired');
-                    resetControls();
-                }
-            }, delay);
-        });
-    };
-
-    // Deliberately polls with setInterval rather than requestAnimationFrame:
-    // browsers fully suspend rAF in hidden/backgrounded tabs, which would
-    // silently miss the deadline if this tab isn't focused right at T-0.
-    // A short setInterval keeps running (Chrome throttles it to ~1/s at
-    // worst once hidden), so the click still fires close to on time either way.
-    const startPreciseWatch = () => {
-        watchIntervalId = setInterval(() => {
-            if (Date.now() >= targetTimestamp) {
-                clearInterval(watchIntervalId);
-                watchIntervalId = null;
-                fireBurst();
-            }
-        }, 15);
-    };
-
-    const updateCountdown = () => {
-        const remainingMs = targetTimestamp - Date.now();
-        if (remainingMs <= 1000) {
-            clearInterval(countdownId);
-            countdownId = null;
-            setStatus('Armed — firing any moment now…', 'armed');
-            return;
-        }
-        const totalSeconds = Math.ceil(remainingMs / 1000);
-        const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-        const ss = String(totalSeconds % 60).padStart(2, '0');
-        setStatus(`Armed — firing in ${mm}:${ss}`, 'armed');
-    };
-
-    const arm = () => {
-        const parsed = parseTargetTime(timeInput.value);
-        if (!parsed) {
-            setStatus('Enter a valid time first.', '');
-            return;
-        }
-        clearTimers();
-        targetTimestamp = parsed.getTime();
-
-        armBtn.disabled = true;
-        cancelBtn.hidden = false;
-        timeInput.disabled = true;
-
-        updateCountdown();
-        countdownId = setInterval(updateCountdown, 1000);
-
-        const msUntilWake = Math.max(targetTimestamp - Date.now() - 250, 0);
-        wakeTimeoutId = setTimeout(startPreciseWatch, msUntilWake);
-    };
-
-    const cancel = () => {
-        clearTimers();
-        resetControls();
-        setStatus('Cancelled. Pick a time and hit Schedule.', '');
-    };
-
-    armBtn.addEventListener('click', arm);
-    cancelBtn.addEventListener('click', cancel);
-}
-
-// 7.2 AutoTap Bookmarklet - the cross-site answer to "click a spot on a
+// 7.1 AutoTap Bookmarklet - the cross-site answer to "click a spot on a
 // *different* page at a fixed time". A page can never reach into another
 // origin's tab (same-origin policy, no exceptions) - so instead of trying to
 // reach over there, this code runs *inside* that other page, dropped in by
@@ -782,12 +627,85 @@ function autotapBookmarkletMain() {
 
 // Builds the javascript: URI from the real function above (toString(), not
 // a hand-written string), so the bookmarklet's source of truth is the
-// readable function and can't drift out of sync with what ships.
+// readable function and can't drift out of sync with what ships. Also wires
+// up the Computer/iPhone install tabs and the copy-to-clipboard button -
+// iOS Safari has no drag-to-bookmarks-bar gesture, so the documented
+// workaround there is: bookmark any page, then edit that bookmark's URL and
+// paste this code in. That requires getting the code onto the clipboard
+// first, which is what the copy button is for.
 function initializeAutoTapBookmarkletLink() {
     const link = document.getElementById('autotapBookmarkletLink');
     if (!link) return;
     const code = '(' + autotapBookmarkletMain.toString() + ')();';
+    const bookmarkletUrl = 'javascript:' + code;
     link.href = 'javascript:' + encodeURIComponent(code);
+
+    const tabDesktop = document.getElementById('autotapTabDesktop');
+    const tabIos = document.getElementById('autotapTabIos');
+    const panelDesktop = document.getElementById('autotapPanelDesktop');
+    const panelIos = document.getElementById('autotapPanelIos');
+
+    if (tabDesktop && tabIos && panelDesktop && panelIos) {
+        const showTab = (activeTab, activePanel, inactiveTab, inactivePanel) => {
+            activeTab.classList.add('is-active');
+            activeTab.setAttribute('aria-selected', 'true');
+            inactiveTab.classList.remove('is-active');
+            inactiveTab.setAttribute('aria-selected', 'false');
+            activePanel.hidden = false;
+            inactivePanel.hidden = true;
+        };
+        tabDesktop.addEventListener('click', () => showTab(tabDesktop, panelDesktop, tabIos, panelIos));
+        tabIos.addEventListener('click', () => showTab(tabIos, panelIos, tabDesktop, panelDesktop));
+    }
+
+    const copyBtn = document.getElementById('autotapCopyBtn');
+    const copyStatus = document.getElementById('autotapCopyStatus');
+    if (!copyBtn || !copyStatus) return;
+
+    const fallbackCopy = (text) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        let ok = false;
+        try {
+            ok = document.execCommand('copy');
+        } catch (e) {
+            ok = false;
+        }
+        textarea.remove();
+        return ok;
+    };
+
+    // navigator.clipboard.writeText() can hang indefinitely instead of
+    // rejecting (seen when the permission stack can never produce a
+    // decision) - race it against a timeout so the fallback always runs
+    // and the button never gets stuck with no feedback.
+    const withTimeout = (promise, ms) =>
+        Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+        ]);
+
+    copyBtn.addEventListener('click', async () => {
+        let copied = false;
+        if (navigator.clipboard?.writeText) {
+            try {
+                await withTimeout(navigator.clipboard.writeText(bookmarkletUrl), 1500);
+                copied = true;
+            } catch (e) {
+                copied = false;
+            }
+        }
+        if (!copied) copied = fallbackCopy(bookmarkletUrl);
+
+        copyStatus.textContent = copied
+            ? 'Copied! Now go paste it into your bookmark’s URL field.'
+            : 'Couldn’t copy automatically — select the bookmarklet link’s address manually instead.';
+        copyStatus.className = 'autotap-copy-status' + (copied ? ' is-success' : ' is-error');
+    });
 }
 
 // 8. 返回顶部按钮
