@@ -421,6 +421,10 @@ function autotapBookmarkletMain() {
         '.atb-label{display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;}' +
         '.atb-row{display:flex;gap:6px;margin-bottom:8px;}' +
         '.atb-input{font:inherit;font-size:12.5px;padding:6px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);flex:1;min-width:0;}' +
+        '.atb-time-row{display:flex;align-items:center;gap:4px;}' +
+        '.atb-time-part{font:inherit;font-size:15px;padding:6px 0;border-radius:8px;border:1px solid rgba(0,0,0,0.15);' +
+        'width:34px;text-align:center;-webkit-appearance:none;appearance:none;}' +
+        '.atb-time-sep{font-weight:700;color:#6b6b6b;}' +
         '.atb-status{font-size:11.5px;color:#6b6b6b;min-height:2.6em;}' +
         '.atb-status.is-armed{color:#6b1d2b;font-weight:600;}' +
         '.atb-status.is-fired{color:#2f7a4d;font-weight:600;}' +
@@ -432,10 +436,16 @@ function autotapBookmarkletMain() {
         '<div class="atb-body">' +
         '<button id="atbPick" class="atb-btn" style="width:100%;margin-bottom:8px;">Pick Target</button>' +
         '<div id="atbTargetInfo" class="atb-target-info">No target selected yet.</div>' +
-        '<label class="atb-label" for="atbTime">Start time</label>' +
+        '<label class="atb-label">Start time (24h, HH:MM:SS)</label>' +
+        '<div class="atb-row atb-time-row">' +
+        '<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" id="atbHour" class="atb-time-part" placeholder="HH">' +
+        '<span class="atb-time-sep">:</span>' +
+        '<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" id="atbMin" class="atb-time-part" placeholder="MM">' +
+        '<span class="atb-time-sep">:</span>' +
+        '<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" id="atbSec" class="atb-time-part" placeholder="SS">' +
+        '</div>' +
         '<div class="atb-row">' +
-        '<input type="time" step="1" id="atbTime" class="atb-input">' +
-        '<button id="atbArm" class="atb-btn atb-btn-primary" disabled>Schedule</button>' +
+        '<button id="atbArm" class="atb-btn atb-btn-primary" style="width:100%;" disabled>Schedule</button>' +
         '</div>' +
         '<button id="atbCancel" class="atb-btn" style="width:100%;margin-bottom:8px;" hidden>Cancel</button>' +
         '<div id="atbStatus" class="atb-status">Pick a target, then schedule.</div>' +
@@ -445,17 +455,42 @@ function autotapBookmarkletMain() {
     var closeBtn = shadow.getElementById('atbClose');
     var pickBtn = shadow.getElementById('atbPick');
     var targetInfo = shadow.getElementById('atbTargetInfo');
-    var timeInput = shadow.getElementById('atbTime');
+    var hourInput = shadow.getElementById('atbHour');
+    var minInput = shadow.getElementById('atbMin');
+    var secInput = shadow.getElementById('atbSec');
+    var timeInputs = [hourInput, minInput, secInput];
     var armBtn = shadow.getElementById('atbArm');
     var cancelBtn = shadow.getElementById('atbCancel');
     var statusEl = shadow.getElementById('atbStatus');
     var logEl = shadow.getElementById('atbLog');
 
+    // Plain number fields instead of <input type="time">: iOS Safari's
+    // native time-picker wheel doesn't expose a seconds column even with
+    // step="1", so the user can never see or edit seconds - any leftover
+    // seconds value (e.g. from this default) stays silently baked into the
+    // value, which is exactly why the fired time didn't match what was
+    // typed. Three explicit fields behave identically on every platform.
     var soon = new Date(Date.now() + 60000);
-    timeInput.value =
-        String(soon.getHours()).padStart(2, '0') + ':' +
-        String(soon.getMinutes()).padStart(2, '0') + ':' +
-        String(soon.getSeconds()).padStart(2, '0');
+    hourInput.value = String(soon.getHours()).padStart(2, '0');
+    minInput.value = String(soon.getMinutes()).padStart(2, '0');
+    secInput.value = '00';
+
+    timeInputs.forEach(function (input, idx) {
+        input.addEventListener('input', function () {
+            input.value = input.value.replace(/[^0-9]/g, '').slice(0, 2);
+            if (input.value.length === 2 && idx < timeInputs.length - 1) {
+                timeInputs[idx + 1].focus();
+                timeInputs[idx + 1].select();
+            }
+        });
+        input.addEventListener('blur', function () {
+            if (input.value === '') return;
+            var max = idx === 0 ? 23 : 59;
+            var n = Math.min(parseInt(input.value, 10) || 0, max);
+            input.value = String(n).padStart(2, '0');
+        });
+        input.addEventListener('focus', function () { input.select(); });
+    });
 
     var pickedTarget = null;
     var picking = false;
@@ -524,7 +559,7 @@ function autotapBookmarkletMain() {
     function resetControls() {
         armBtn.disabled = !pickedTarget;
         cancelBtn.hidden = true;
-        timeInput.disabled = false;
+        timeInputs.forEach(function (input) { input.disabled = false; });
         pickBtn.disabled = false;
     }
 
@@ -553,20 +588,12 @@ function autotapBookmarkletMain() {
         setTimeout(function () { pickedTarget.style.outline = prevOutline; }, 1500);
     }
 
-    function parseTargetTime(inputEl) {
-        var h, m, s;
-        // valueAsDate carries the picked HH:MM:SS in its UTC fields (the
-        // spec's way of storing a timezone-less time-of-day) - reading it
-        // this way sidesteps any string-formatting quirks in a given
-        // engine's .value serialization, so it's preferred when available.
-        if (inputEl.valueAsDate) {
-            h = inputEl.valueAsDate.getUTCHours();
-            m = inputEl.valueAsDate.getUTCMinutes();
-            s = inputEl.valueAsDate.getUTCSeconds();
-        } else {
-            var parts = inputEl.value.split(':').map(Number);
-            if (parts.some(isNaN)) return null;
-            h = parts[0]; m = parts[1]; s = parts[2] || 0;
+    function parseTargetTime() {
+        var h = parseInt(hourInput.value, 10);
+        var m = parseInt(minInput.value, 10);
+        var s = secInput.value === '' ? 0 : parseInt(secInput.value, 10);
+        if (isNaN(h) || isNaN(m) || isNaN(s) || h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) {
+            return null;
         }
         var date = new Date();
         date.setHours(h, m, s, 0);
@@ -634,9 +661,9 @@ function autotapBookmarkletMain() {
             setStatus('Pick a target first.', '');
             return;
         }
-        var parsed = parseTargetTime(timeInput);
+        var parsed = parseTargetTime();
         if (!parsed) {
-            setStatus('Enter a valid time first.', '');
+            setStatus('Enter a valid time first (HH 0-23, MM/SS 0-59).', '');
             return;
         }
         clearTimers();
@@ -646,7 +673,7 @@ function autotapBookmarkletMain() {
 
         armBtn.disabled = true;
         cancelBtn.hidden = false;
-        timeInput.disabled = true;
+        timeInputs.forEach(function (input) { input.disabled = true; });
         pickBtn.disabled = true;
 
         updateCountdown();
