@@ -25,6 +25,7 @@
                     <li><a href="#experience" class="nav-link">Experience</a></li>
                     <li><a href="#research" class="nav-link">Research</a></li>
                     <li><a href="#skills" class="nav-link">Skills</a></li>
+                    <li><a href="#tools" class="nav-link">Tools</a></li>
                     <li><a href="#contact" class="nav-link">Contact</a></li>
                 </ul>
                 <a href="index-zh.html" class="lang-switch" lang="zh" hreflang="zh">中文</a>
@@ -430,6 +431,64 @@
                         <span class="skill-tag">Kotlin</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tools -->
+    <section id="tools" class="tools section-flip">
+        <div class="container">
+            <h2 class="section-title">Tools</h2>
+            <div class="tools-intro">
+                <h3 class="tools-name"><span aria-hidden="true">⏱️</span> AutoTap Scheduler</h3>
+                <p>
+                    A precision web tool I built for split-second actions — set an exact start time like
+                    <code>19:00:00</code> and it fires a click the instant that moment arrives, useful for grabbing
+                    limited tickets or flash-sale items before they sell out.
+                </p>
+                <p class="tools-scope-note">
+                    <strong>Scope:</strong> a page's JavaScript can never reach into a <em>different</em> tab or site
+                    — browsers block that by design (same-origin policy), on iOS, macOS, or anywhere else. So this
+                    ships two ways to use it: a live demo below that clicks a button on this same page, and a
+                    bookmarklet that runs the identical engine directly inside whichever real site you need to act
+                    on, since that's the only way to legitimately click something on another site.
+                </p>
+            </div>
+
+            <div class="autotap-demo" id="autotapDemo">
+                <div class="autotap-target-wrap">
+                    <button type="button" class="autotap-target" id="autotapTarget">
+                        <span class="autotap-target-icon" aria-hidden="true">🎟️</span>
+                        <span>Grab Now</span>
+                    </button>
+                    <p class="autotap-target-caption">Demo target — gets auto-clicked at your scheduled time</p>
+                </div>
+
+                <div class="autotap-controls">
+                    <label class="autotap-label" for="autotapTime">Start time</label>
+                    <div class="autotap-input-row">
+                        <input type="time" step="1" id="autotapTime" class="autotap-time-input">
+                        <button type="button" class="btn btn-primary autotap-arm-btn" id="autotapArmBtn">Schedule</button>
+                        <button type="button" class="btn btn-secondary autotap-cancel-btn" id="autotapCancelBtn" hidden>Cancel</button>
+                    </div>
+                    <p class="autotap-status" id="autotapStatus" role="status" aria-live="polite">Pick a time and hit Schedule.</p>
+                    <ul class="autotap-log" id="autotapLog" aria-live="polite"></ul>
+                </div>
+            </div>
+
+            <div class="autotap-bookmarklet">
+                <h3 class="autotap-bookmarklet-title">Use it on another site</h3>
+                <ol class="autotap-bookmarklet-steps">
+                    <li>Drag this button to your bookmarks bar: <a href="javascript:void(0);" id="autotapBookmarkletLink" class="autotap-bookmarklet-btn" onclick="return false;">📌 AutoTap Here</a></li>
+                    <li>Open the real page with the button you want to click (e.g. a checkout or ticket page).</li>
+                    <li>Click the bookmarklet — a small panel appears on that page.</li>
+                    <li>Click "Pick Target", then click the real button once to mark it (this click won't trigger it).</li>
+                    <li>Set the start time and hit Schedule. Keep that tab open until it fires.</li>
+                </ol>
+                <p class="tools-scope-note">
+                    This only works while that exact tab stays loaded — closing or refreshing it cancels the
+                    schedule, since the timer lives in that page's own JavaScript, nowhere else.
+                </p>
             </div>
         </div>
     </section>

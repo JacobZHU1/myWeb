@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeCardTilt();
     initializeForm();
     createBackToTopButton();
+    initializeAutoTapTool();
+    initializeAutoTapBookmarkletLink();
 });
 
 // 2. 导航栏交互
@@ -368,6 +370,424 @@ function initializeForm() {
             );
         }
     });
+}
+
+// 7.1 AutoTap Scheduler - fires a real click on a target element at an
+// exact wall-clock time (e.g. 19:00:00). Runs a coarse setTimeout to get
+// close, then a tight setInterval poll right before the target so the click
+// fires within ~15ms of the deadline (not requestAnimationFrame - browsers
+// fully suspend rAF in hidden/backgrounded tabs, which would silently miss
+// the deadline). A short burst of follow-up clicks absorbs the polling
+// slack. This demo only ever clicks elements within this page - it cannot
+// reach other tabs or apps, which is a browser sandboxing limit on every
+// platform, not a bug. To click something on a different site, use the
+// AutoTap Bookmarklet below instead: it runs the same engine inside that
+// page's own context, which the sandbox allows.
+function initializeAutoTapTool() {
+    const timeInput = document.getElementById('autotapTime');
+    const armBtn = document.getElementById('autotapArmBtn');
+    const cancelBtn = document.getElementById('autotapCancelBtn');
+    const statusEl = document.getElementById('autotapStatus');
+    const logEl = document.getElementById('autotapLog');
+    const target = document.getElementById('autotapTarget');
+    if (!timeInput || !armBtn || !cancelBtn || !statusEl || !logEl || !target) return;
+
+    const BURST_CLICKS = [0, 40, 90];
+    const MAX_LOG_ENTRIES = 5;
+
+    let countdownId = null;
+    let wakeTimeoutId = null;
+    let watchIntervalId = null;
+    let targetTimestamp = null;
+
+    // Default the input to one minute from now so the field starts populated.
+    const soon = new Date(Date.now() + 60000);
+    timeInput.value =
+        `${String(soon.getHours()).padStart(2, '0')}:` +
+        `${String(soon.getMinutes()).padStart(2, '0')}:` +
+        `${String(soon.getSeconds()).padStart(2, '0')}`;
+
+    const setStatus = (message, tone) => {
+        statusEl.textContent = message;
+        statusEl.className = 'autotap-status' + (tone ? ` is-${tone}` : '');
+    };
+
+    const formatClock = (date) =>
+        date.toLocaleTimeString('en-GB', { hour12: false }) +
+        '.' + String(date.getMilliseconds()).padStart(3, '0');
+
+    const logEntry = (text) => {
+        const li = document.createElement('li');
+        li.textContent = text;
+        logEl.prepend(li);
+        while (logEl.children.length > MAX_LOG_ENTRIES) {
+            logEl.removeChild(logEl.lastChild);
+        }
+    };
+
+    const clearTimers = () => {
+        if (countdownId) clearInterval(countdownId);
+        if (wakeTimeoutId) clearTimeout(wakeTimeoutId);
+        if (watchIntervalId) clearInterval(watchIntervalId);
+        countdownId = wakeTimeoutId = watchIntervalId = null;
+    };
+
+    const resetControls = () => {
+        armBtn.disabled = false;
+        cancelBtn.hidden = true;
+        timeInput.disabled = false;
+    };
+
+    const parseTargetTime = (value) => {
+        const parts = value.split(':').map(Number);
+        if (parts.some(Number.isNaN)) return null;
+        const [h, m, s = 0] = parts;
+        const date = new Date();
+        date.setHours(h, m, s, 0);
+        if (date.getTime() <= Date.now()) {
+            date.setDate(date.getDate() + 1);
+        }
+        return date;
+    };
+
+    const fireBurst = () => {
+        BURST_CLICKS.forEach((delay, i) => {
+            setTimeout(() => {
+                const now = new Date();
+                target.classList.remove('is-firing');
+                requestAnimationFrame(() => target.classList.add('is-firing'));
+                target.click();
+                const deltaMs = now.getTime() - targetTimestamp;
+                const sign = deltaMs >= 0 ? '+' : '';
+                logEntry(`Click ${i + 1}/${BURST_CLICKS.length} at ${formatClock(now)} (${sign}${deltaMs}ms from target)`);
+                if (i === BURST_CLICKS.length - 1) {
+                    setStatus(`Fired ${BURST_CLICKS.length} clicks around ${formatClock(new Date(targetTimestamp))}.`, 'fired');
+                    resetControls();
+                }
+            }, delay);
+        });
+    };
+
+    // Deliberately polls with setInterval rather than requestAnimationFrame:
+    // browsers fully suspend rAF in hidden/backgrounded tabs, which would
+    // silently miss the deadline if this tab isn't focused right at T-0.
+    // A short setInterval keeps running (Chrome throttles it to ~1/s at
+    // worst once hidden), so the click still fires close to on time either way.
+    const startPreciseWatch = () => {
+        watchIntervalId = setInterval(() => {
+            if (Date.now() >= targetTimestamp) {
+                clearInterval(watchIntervalId);
+                watchIntervalId = null;
+                fireBurst();
+            }
+        }, 15);
+    };
+
+    const updateCountdown = () => {
+        const remainingMs = targetTimestamp - Date.now();
+        if (remainingMs <= 1000) {
+            clearInterval(countdownId);
+            countdownId = null;
+            setStatus('Armed — firing any moment now…', 'armed');
+            return;
+        }
+        const totalSeconds = Math.ceil(remainingMs / 1000);
+        const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const ss = String(totalSeconds % 60).padStart(2, '0');
+        setStatus(`Armed — firing in ${mm}:${ss}`, 'armed');
+    };
+
+    const arm = () => {
+        const parsed = parseTargetTime(timeInput.value);
+        if (!parsed) {
+            setStatus('Enter a valid time first.', '');
+            return;
+        }
+        clearTimers();
+        targetTimestamp = parsed.getTime();
+
+        armBtn.disabled = true;
+        cancelBtn.hidden = false;
+        timeInput.disabled = true;
+
+        updateCountdown();
+        countdownId = setInterval(updateCountdown, 1000);
+
+        const msUntilWake = Math.max(targetTimestamp - Date.now() - 250, 0);
+        wakeTimeoutId = setTimeout(startPreciseWatch, msUntilWake);
+    };
+
+    const cancel = () => {
+        clearTimers();
+        resetControls();
+        setStatus('Cancelled. Pick a time and hit Schedule.', '');
+    };
+
+    armBtn.addEventListener('click', arm);
+    cancelBtn.addEventListener('click', cancel);
+}
+
+// 7.2 AutoTap Bookmarklet - the cross-site answer to "click a spot on a
+// *different* page at a fixed time". A page can never reach into another
+// origin's tab (same-origin policy, no exceptions) - so instead of trying to
+// reach over there, this code runs *inside* that other page, dropped in by
+// the user's own bookmarklet click. Self-contained on purpose: it must work
+// dropped into a stranger's page with zero access to this site's CSS/JS.
+// Built from a real function (not a hand-escaped string) via Function.
+// prototype.toString() so the source below is what actually executes - no
+// string-escaping bugs between "what I wrote" and "what runs".
+function autotapBookmarkletMain() {
+    var HOST_ID = '__autotapBookmarkletHost';
+    var existing = document.getElementById(HOST_ID);
+    if (existing) {
+        if (window.__autotapBookmarkletCleanup) window.__autotapBookmarkletCleanup();
+        existing.remove();
+        return;
+    }
+
+    var BURST_CLICKS = [0, 40, 90];
+    var MAX_LOG_ENTRIES = 5;
+
+    var host = document.createElement('div');
+    host.id = HOST_ID;
+    host.style.position = 'fixed';
+    host.style.bottom = '20px';
+    host.style.right = '20px';
+    host.style.zIndex = '2147483647';
+    document.documentElement.appendChild(host);
+    var shadow = host.attachShadow({ mode: 'open' });
+
+    shadow.innerHTML =
+        '<style>' +
+        ':host{all:initial;}' +
+        '.atb-panel{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;width:280px;' +
+        'background:rgba(255,255,255,0.97);border:1px solid rgba(0,0,0,0.12);border-radius:14px;' +
+        'box-shadow:0 12px 40px rgba(0,0,0,0.25);overflow:hidden;color:#1a1a1a;}' +
+        '.atb-header{background:linear-gradient(135deg,#6b1d2b,#8b2c42);color:#fff;padding:10px 12px;' +
+        'font-weight:700;font-size:13px;display:flex;justify-content:space-between;align-items:center;}' +
+        '.atb-close{cursor:pointer;font-size:16px;line-height:1;padding:0 4px;}' +
+        '.atb-body{padding:12px;}' +
+        '.atb-btn{font:inherit;font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);' +
+        'background:#f5f5f7;cursor:pointer;color:#1a1a1a;}' +
+        '.atb-btn-primary{background:#6b1d2b;color:#fff;border-color:#6b1d2b;}' +
+        '.atb-btn:disabled{opacity:0.5;cursor:default;}' +
+        '.atb-target-info{font-size:11.5px;color:#6b6b6b;margin:8px 0;word-break:break-word;' +
+        'background:#f5f5f7;border-radius:6px;padding:6px 8px;}' +
+        '.atb-label{display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;}' +
+        '.atb-row{display:flex;gap:6px;margin-bottom:8px;}' +
+        '.atb-input{font:inherit;font-size:12.5px;padding:6px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);flex:1;min-width:0;}' +
+        '.atb-status{font-size:11.5px;color:#6b6b6b;min-height:2.6em;}' +
+        '.atb-status.is-armed{color:#6b1d2b;font-weight:600;}' +
+        '.atb-status.is-fired{color:#2f7a4d;font-weight:600;}' +
+        '.atb-log{list-style:none;margin:6px 0 0;padding:0;font-family:ui-monospace,Menlo,monospace;' +
+        'font-size:10.5px;color:#6b6b6b;display:flex;flex-direction:column;gap:3px;max-height:80px;overflow:auto;}' +
+        '</style>' +
+        '<div class="atb-panel">' +
+        '<div class="atb-header"><span>⏱ AutoTap</span><span class="atb-close" id="atbClose">×</span></div>' +
+        '<div class="atb-body">' +
+        '<button id="atbPick" class="atb-btn" style="width:100%;margin-bottom:8px;">Pick Target</button>' +
+        '<div id="atbTargetInfo" class="atb-target-info">No target selected yet.</div>' +
+        '<label class="atb-label" for="atbTime">Start time</label>' +
+        '<div class="atb-row">' +
+        '<input type="time" step="1" id="atbTime" class="atb-input">' +
+        '<button id="atbArm" class="atb-btn atb-btn-primary" disabled>Schedule</button>' +
+        '</div>' +
+        '<button id="atbCancel" class="atb-btn" style="width:100%;margin-bottom:8px;" hidden>Cancel</button>' +
+        '<div id="atbStatus" class="atb-status">Pick a target, then schedule.</div>' +
+        '<ul id="atbLog"></ul>' +
+        '</div></div>';
+
+    var closeBtn = shadow.getElementById('atbClose');
+    var pickBtn = shadow.getElementById('atbPick');
+    var targetInfo = shadow.getElementById('atbTargetInfo');
+    var timeInput = shadow.getElementById('atbTime');
+    var armBtn = shadow.getElementById('atbArm');
+    var cancelBtn = shadow.getElementById('atbCancel');
+    var statusEl = shadow.getElementById('atbStatus');
+    var logEl = shadow.getElementById('atbLog');
+
+    var soon = new Date(Date.now() + 60000);
+    timeInput.value =
+        String(soon.getHours()).padStart(2, '0') + ':' +
+        String(soon.getMinutes()).padStart(2, '0') + ':' +
+        String(soon.getSeconds()).padStart(2, '0');
+
+    var pickedTarget = null;
+    var picking = false;
+    var countdownId = null;
+    var wakeTimeoutId = null;
+    var watchIntervalId = null;
+    var targetTimestamp = null;
+
+    function setStatus(message, tone) {
+        statusEl.textContent = message;
+        statusEl.className = 'atb-status' + (tone ? ' is-' + tone : '');
+    }
+
+    function formatClock(date) {
+        return date.toLocaleTimeString('en-GB', { hour12: false }) +
+            '.' + String(date.getMilliseconds()).padStart(3, '0');
+    }
+
+    function logEntry(text) {
+        var li = document.createElement('li');
+        li.textContent = text;
+        logEl.prepend(li);
+        while (logEl.children.length > MAX_LOG_ENTRIES) logEl.removeChild(logEl.lastChild);
+    }
+
+    function clearTimers() {
+        if (countdownId) clearInterval(countdownId);
+        if (wakeTimeoutId) clearTimeout(wakeTimeoutId);
+        if (watchIntervalId) clearInterval(watchIntervalId);
+        countdownId = wakeTimeoutId = watchIntervalId = null;
+    }
+
+    function resetControls() {
+        armBtn.disabled = !pickedTarget;
+        cancelBtn.hidden = true;
+        timeInput.disabled = false;
+        pickBtn.disabled = false;
+    }
+
+    function describeTarget(el) {
+        var tag = el.tagName.toLowerCase();
+        var id = el.id ? '#' + el.id : '';
+        var text = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        return '<' + tag + '>' + id + (text ? ' "' + text + '"' : '');
+    }
+
+    function onDocumentClickWhilePicking(e) {
+        if (e.target === host) return;
+        e.preventDefault();
+        e.stopPropagation();
+        document.removeEventListener('click', onDocumentClickWhilePicking, true);
+        picking = false;
+        pickedTarget = e.target;
+        pickBtn.textContent = 'Pick Target';
+        pickBtn.disabled = false;
+        targetInfo.textContent = 'Target: ' + describeTarget(pickedTarget);
+        armBtn.disabled = false;
+        setStatus('Target marked. Pick a time and hit Schedule.', '');
+
+        var prevOutline = pickedTarget.style.outline;
+        pickedTarget.style.outline = '3px solid #d4a574';
+        setTimeout(function () { pickedTarget.style.outline = prevOutline; }, 1500);
+    }
+
+    function parseTargetTime(value) {
+        var parts = value.split(':').map(Number);
+        if (parts.some(isNaN)) return null;
+        var h = parts[0], m = parts[1], s = parts[2] || 0;
+        var date = new Date();
+        date.setHours(h, m, s, 0);
+        if (date.getTime() <= Date.now()) date.setDate(date.getDate() + 1);
+        return date;
+    }
+
+    function fireBurst() {
+        BURST_CLICKS.forEach(function (delay, i) {
+            setTimeout(function () {
+                var now = new Date();
+                pickedTarget.click();
+                var deltaMs = now.getTime() - targetTimestamp;
+                var sign = deltaMs >= 0 ? '+' : '';
+                logEntry('Click ' + (i + 1) + '/' + BURST_CLICKS.length + ' at ' + formatClock(now) +
+                    ' (' + sign + deltaMs + 'ms)');
+                if (i === BURST_CLICKS.length - 1) {
+                    setStatus('Fired ' + BURST_CLICKS.length + ' clicks around ' + formatClock(new Date(targetTimestamp)) + '.', 'fired');
+                    resetControls();
+                }
+            }, delay);
+        });
+    }
+
+    function startPreciseWatch() {
+        watchIntervalId = setInterval(function () {
+            if (Date.now() >= targetTimestamp) {
+                clearInterval(watchIntervalId);
+                watchIntervalId = null;
+                fireBurst();
+            }
+        }, 15);
+    }
+
+    function updateCountdown() {
+        var remainingMs = targetTimestamp - Date.now();
+        if (remainingMs <= 1000) {
+            clearInterval(countdownId);
+            countdownId = null;
+            setStatus('Armed — firing any moment now…', 'armed');
+            return;
+        }
+        var totalSeconds = Math.ceil(remainingMs / 1000);
+        var mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        var ss = String(totalSeconds % 60).padStart(2, '0');
+        setStatus('Armed — firing in ' + mm + ':' + ss, 'armed');
+    }
+
+    pickBtn.addEventListener('click', function () {
+        if (picking) {
+            picking = false;
+            document.removeEventListener('click', onDocumentClickWhilePicking, true);
+            pickBtn.textContent = 'Pick Target';
+            return;
+        }
+        picking = true;
+        pickBtn.textContent = 'Click the real target…';
+        document.addEventListener('click', onDocumentClickWhilePicking, true);
+    });
+
+    armBtn.addEventListener('click', function () {
+        if (!pickedTarget) {
+            setStatus('Pick a target first.', '');
+            return;
+        }
+        var parsed = parseTargetTime(timeInput.value);
+        if (!parsed) {
+            setStatus('Enter a valid time first.', '');
+            return;
+        }
+        clearTimers();
+        targetTimestamp = parsed.getTime();
+
+        armBtn.disabled = true;
+        cancelBtn.hidden = false;
+        timeInput.disabled = true;
+        pickBtn.disabled = true;
+
+        updateCountdown();
+        countdownId = setInterval(updateCountdown, 1000);
+
+        var msUntilWake = Math.max(targetTimestamp - Date.now() - 250, 0);
+        wakeTimeoutId = setTimeout(startPreciseWatch, msUntilWake);
+    });
+
+    cancelBtn.addEventListener('click', function () {
+        clearTimers();
+        resetControls();
+        setStatus('Cancelled. Pick a time and hit Schedule.', '');
+    });
+
+    closeBtn.addEventListener('click', function () {
+        if (window.__autotapBookmarkletCleanup) window.__autotapBookmarkletCleanup();
+        host.remove();
+    });
+
+    window.__autotapBookmarkletCleanup = function () {
+        clearTimers();
+        document.removeEventListener('click', onDocumentClickWhilePicking, true);
+    };
+}
+
+// Builds the javascript: URI from the real function above (toString(), not
+// a hand-written string), so the bookmarklet's source of truth is the
+// readable function and can't drift out of sync with what ships.
+function initializeAutoTapBookmarkletLink() {
+    const link = document.getElementById('autotapBookmarkletLink');
+    if (!link) return;
+    const code = '(' + autotapBookmarkletMain.toString() + ')();';
+    link.href = 'javascript:' + encodeURIComponent(code);
 }
 
 // 8. 返回顶部按钮
