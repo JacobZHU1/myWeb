@@ -463,6 +463,39 @@ function autotapBookmarkletMain() {
     var wakeTimeoutId = null;
     var watchIntervalId = null;
     var targetTimestamp = null;
+    var screenLock = null;
+    var armed = false;
+
+    // iOS Safari aggressively suspends a tab's JS timers the moment the
+    // screen auto-locks or the page is backgrounded - that's the #1 cause
+    // of "fires late on iPhone, fine on a computer": the timer isn't
+    // wrong, it's frozen until you return, then it catches up immediately.
+    // The Screen Wake Lock API (supported in iOS Safari 16.4+) stops the
+    // screen from auto-locking from inactivity while armed, which removes
+    // the most common trigger. It can't stop someone manually pressing the
+    // side button or switching apps - nothing in a web page can prevent
+    // that - so the status line also warns when the page goes hidden.
+    function requestScreenLock() {
+        if (!navigator.wakeLock) return;
+        navigator.wakeLock.request('screen').then(function (lock) {
+            screenLock = lock;
+            screenLock.addEventListener('release', function () { screenLock = null; });
+        }).catch(function () { screenLock = null; });
+    }
+
+    function releaseScreenLock() {
+        if (screenLock) screenLock.release().catch(function () {});
+        screenLock = null;
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (!armed) return;
+        if (document.visibilityState === 'visible') {
+            requestScreenLock();
+        } else {
+            setStatus('⚠️ Page is backgrounded - iOS may pause the timer until you return to this tab.', 'armed');
+        }
+    });
 
     function setStatus(message, tone) {
         statusEl.textContent = message;
@@ -520,10 +553,21 @@ function autotapBookmarkletMain() {
         setTimeout(function () { pickedTarget.style.outline = prevOutline; }, 1500);
     }
 
-    function parseTargetTime(value) {
-        var parts = value.split(':').map(Number);
-        if (parts.some(isNaN)) return null;
-        var h = parts[0], m = parts[1], s = parts[2] || 0;
+    function parseTargetTime(inputEl) {
+        var h, m, s;
+        // valueAsDate carries the picked HH:MM:SS in its UTC fields (the
+        // spec's way of storing a timezone-less time-of-day) - reading it
+        // this way sidesteps any string-formatting quirks in a given
+        // engine's .value serialization, so it's preferred when available.
+        if (inputEl.valueAsDate) {
+            h = inputEl.valueAsDate.getUTCHours();
+            m = inputEl.valueAsDate.getUTCMinutes();
+            s = inputEl.valueAsDate.getUTCSeconds();
+        } else {
+            var parts = inputEl.value.split(':').map(Number);
+            if (parts.some(isNaN)) return null;
+            h = parts[0]; m = parts[1]; s = parts[2] || 0;
+        }
         var date = new Date();
         date.setHours(h, m, s, 0);
         if (date.getTime() <= Date.now()) date.setDate(date.getDate() + 1);
@@ -540,6 +584,8 @@ function autotapBookmarkletMain() {
                 logEntry('Click ' + (i + 1) + '/' + BURST_CLICKS.length + ' at ' + formatClock(now) +
                     ' (' + sign + deltaMs + 'ms)');
                 if (i === BURST_CLICKS.length - 1) {
+                    armed = false;
+                    releaseScreenLock();
                     setStatus('Fired ' + BURST_CLICKS.length + ' clicks around ' + formatClock(new Date(targetTimestamp)) + '.', 'fired');
                     resetControls();
                 }
@@ -588,13 +634,15 @@ function autotapBookmarkletMain() {
             setStatus('Pick a target first.', '');
             return;
         }
-        var parsed = parseTargetTime(timeInput.value);
+        var parsed = parseTargetTime(timeInput);
         if (!parsed) {
             setStatus('Enter a valid time first.', '');
             return;
         }
         clearTimers();
         targetTimestamp = parsed.getTime();
+        armed = true;
+        requestScreenLock();
 
         armBtn.disabled = true;
         cancelBtn.hidden = false;
@@ -609,6 +657,8 @@ function autotapBookmarkletMain() {
     });
 
     cancelBtn.addEventListener('click', function () {
+        armed = false;
+        releaseScreenLock();
         clearTimers();
         resetControls();
         setStatus('Cancelled. Pick a time and hit Schedule.', '');
@@ -620,6 +670,8 @@ function autotapBookmarkletMain() {
     });
 
     window.__autotapBookmarkletCleanup = function () {
+        armed = false;
+        releaseScreenLock();
         clearTimers();
         document.removeEventListener('click', onDocumentClickWhilePicking, true);
     };
