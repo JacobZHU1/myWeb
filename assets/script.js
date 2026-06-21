@@ -677,6 +677,17 @@ function autotapBookmarkletMain() {
     };
 }
 
+// Strips // line comments and collapses all whitespace/newlines to single
+// spaces. Required, not cosmetic: the iOS install path pastes this code
+// into a single-line bookmark "Address" field, which collapses newlines.
+// Without this, the first // comment would swallow every line after it -
+// including the function's closing braces - turning the whole bookmarklet
+// into a syntax error that silently does nothing when tapped. None of this
+// function's string literals contain "//", so the strip is unambiguous.
+function minifyBookmarkletSource(src) {
+    return src.replace(/\/\/.*$/gm, '').replace(/\s+/g, ' ').trim();
+}
+
 // Builds the javascript: URI from the real function above (toString(), not
 // a hand-written string), so the bookmarklet's source of truth is the
 // readable function and can't drift out of sync with what ships. Also wires
@@ -688,7 +699,8 @@ function autotapBookmarkletMain() {
 function initializeAutoTapBookmarkletLink() {
     const link = document.getElementById('autotapBookmarkletLink');
     if (!link) return;
-    const code = '(' + autotapBookmarkletMain.toString() + ')();';
+    const minified = minifyBookmarkletSource(autotapBookmarkletMain.toString());
+    const code = '(' + minified + ')();';
     const bookmarkletUrl = 'javascript:' + code;
     link.href = 'javascript:' + encodeURIComponent(code);
 
